@@ -1,0 +1,190 @@
+package formatter
+
+import (
+	"testing"
+	"unicode/utf8"
+)
+
+// tests は仕様そのもの。ルールを追加・変更するときは先にここへケースを足す。
+// name の先頭はルール名（README のルール一覧と対応させる）。
+var tests = []struct {
+	name string
+	in   string
+	want string
+}{
+	// 日本語と英数字の間にスペースを入れる
+	{"基本/漢字の後", "日本語abc", "日本語 abc"},
+	{"基本/漢字の前", "abc日本語", "abc 日本語"},
+	{"基本/両側", "日本語abc日本語", "日本語 abc 日本語"},
+	{"基本/ひらがな", "これはpenです", "これは pen です"},
+	{"基本/カタカナ", "テストcase", "テスト case"},
+	{"基本/長音記号", "ユーザーID", "ユーザー ID"},
+	{"基本/踊り字", "日々Go", "日々 Go"},
+	{"基本/ガイド例 Word", "Wordを使用するときは", "Word を使用するときは"},
+	{"基本/ガイド例 Shift", "Shiftキー", "Shift キー"},
+	{"基本/語中の記号は単語の一部", "node.jsとWi-Fiとfoo_barを使う", "node.js と Wi-Fi と foo_bar を使う"},
+	{"基本/アクセント付きラテン文字", "caféで", "café で"},
+	{"基本/全角英数字は対象外", "Ｗｏｒｄを使う", "Ｗｏｒｄを使う"},
+	{"基本/半角カタカナは対象外", "ｶﾀｶﾅabc", "ｶﾀｶﾅabc"},
+	{"基本/空文字", "", ""},
+
+	// 数字と日本語の間にもスペースを入れる（ガイドの「第 3 章」「平成 3 年」に従う）
+	{"数字/助数詞", "10個", "10 個"},
+	{"数字/月", "3月", "3 月"},
+	{"数字/ガイド例 章", "第3章", "第 3 章"},
+	{"数字/ガイド例 日付", "平成3年6月28日", "平成 3 年 6 月 28 日"},
+	{"数字/小数", "1.5倍", "1.5 倍"},
+
+	// 全角記号の前後にはスペースを入れない
+	{"全角記号/句読点", "Word、Excel。", "Word、Excel。"},
+	{"全角記号/かぎ括弧", "「test」と入力します。", "「test」と入力します。"},
+	{"全角記号/二重かぎ括弧", "『abc』を参照", "『abc』を参照"},
+	{"全角記号/丸括弧", "（Excel）を使う", "（Excel）を使う"},
+	{"全角記号/隅付き括弧", "【PR】お知らせ", "【PR】お知らせ"},
+	{"全角記号/感嘆符と疑問符", "OK！本当？yes", "OK！本当？yes"},
+	{"全角記号/中黒", "Wi-Fi・Bluetooth", "Wi-Fi・Bluetooth"},
+
+	// 半角記号
+	{"半角記号/スラッシュの両側", "日本/US/日本", "日本/US/日本"},
+	{"半角記号/分数", "3/14", "3/14"},
+	{"半角記号/語末の疑問符", "更新しますか?", "更新しますか?"},
+	{"半角記号/語末の感嘆符", "警告!", "警告!"},
+	{"半角記号/語末のコロン", "フォント:", "フォント:"},
+	{"半角記号/語末の省略記号", "その他...", "その他..."},
+	{"半角記号/半角括弧の内側", "列 A (タイトル)", "列 A (タイトル)"},
+	{"半角記号/半角括弧の外側", "日本語(Japanese)です", "日本語 (Japanese) です"},
+	{"半角記号/アクセスキー", "保存(S)", "保存 (S)"},
+	{"半角記号/半角括弧で囲んだ日本語", "これは(タイトル)です", "これは (タイトル) です"},
+	{"半角記号/半角角括弧の外側", "[新規]をクリックします", "[新規] をクリックします"},
+	{"半角記号/半角角括弧の前", "設定の[詳細]", "設定の [詳細]"},
+	{"半角記号/Markdown のリンク", "詳細は[こちら](https://example.com)を参照", "詳細は [こちら](https://example.com) を参照"},
+	{"半角記号/チェックボックス", "- [x]タスク", "- [x] タスク"},
+	{"半角記号/疑問符の後の英数字", "保存しますか?Excelを使います", "保存しますか? Excel を使います"},
+	{"半角記号/感嘆符の後の英数字", "完了!Nextを押す", "完了! Next を押す"},
+	{"半角記号/連続した疑問符と感嘆符", "本当?!OK", "本当?! OK"},
+	{"半角記号/疑問符の後の日本語", "本当?はい", "本当?はい"},
+	{"半角記号/英語の文中の疑問符は対象外", "Really?Yes", "Really?Yes"},
+	{"半角記号/パーセントは数字に付く", "50%の確率", "50% の確率"},
+	{"半角記号/単独のパーセント", "割合を%で示す", "割合を%で示す"},
+	{"半角記号/角度", "45°の角度", "45° の角度"},
+	{"半角記号/シャープ", "C#を使う", "C# を使う"},
+	{"半角記号/プラス", "C++で書く", "C++ で書く"},
+	{"半角記号/番号", "詳細は#123を参照", "詳細は #123 を参照"},
+	{"半角記号/メンション", "宛先は@userさん", "宛先は @user さん"},
+	{"半角記号/ドル", "価格は$100です", "価格は $100 です"},
+
+	// 数字と単位の間にスペースを入れる（単位は一覧にあるものだけ）
+	{"単位/基本", "50kg", "50 kg"},
+	{"単位/日本語に続く", "重さは50kgです", "重さは 50 kg です"},
+	{"単位/小数と桁区切り", "1.5GBと1,000km", "1.5 GB と 1,000 km"},
+	{"単位/複数文字", "5000mAhのバッテリー", "5000 mAh のバッテリー"},
+	{"単位/速度", "時速100km/h", "時速 100 km/h"},
+	{"単位/範囲", "10-20kgと10~20kg", "10-20 kg と 10~20 kg"},
+	{"単位/括弧内", "(50kg)", "(50 kg)"},
+	{"単位/文末のピリオド", "It is 50kg.", "It is 50 kg."},
+	{"単位/既にスペース", "50 kg", "50 kg"},
+	{"単位/一覧にない単位", "4Kと5Gと3D", "4K と 5G と 3D"},
+	{"単位/年代", "1990s", "1990s"},
+	{"単位/大文字小文字を区別", "5Kgと5mb", "5Kg と 5mb"},
+	{"単位/識別子の一部", "Python3とmargin:16pxとfoo-10px", "Python3 と margin:16px と foo-10px"},
+	{"単位/ファイル名", "image_100px.pngと100px.png", "image_100px.png と 100px.png"},
+	{"単位/全角数字は対象外", "５０kg", "５０kg"},
+	{"単位/コード内", "`50kg`", "`50kg`"},
+	{"単位/疑問符の後", "本当?5GBも", "本当? 5 GB も"},
+
+	// 既存の空白・改行・インデントを壊さない
+	{"空白/既存の半角スペース", "日本語 abc 日本語", "日本語 abc 日本語"},
+	{"空白/連続スペースは維持", "日本語  abc", "日本語  abc"},
+	{"空白/全角スペース", "日本語　abc", "日本語　abc"},
+	{"空白/タブ", "日本語\tabc", "日本語\tabc"},
+	{"空白/改行", "日本語\nabc", "日本語\nabc"},
+	{"空白/CRLF", "日本語\r\nabc", "日本語\r\nabc"},
+	{"空白/行頭インデント", "  日本語abc\n\t日本語abc", "  日本語 abc\n\t日本語 abc"},
+	{"空白/末尾の改行", "日本語abc\n", "日本語 abc\n"},
+
+	// インラインコードの内部には手を入れない
+	{"コード/内部", "これは `x日本語y` です", "これは `x日本語y` です"},
+	{"コード/複数バッククォート", "``a`日本b``", "``a`日本b``"},
+	{"コード/フェンス", "```\n日本語abc\n```\n日本語abc", "```\n日本語abc\n```\n日本語 abc"},
+	{"コード/閉じていないバッククォート", "`日本語abc", "`日本語 abc"},
+	{"コード/閉じていないバッククォートの外側", "これは`です", "これは`です"},
+	{"コード/外側", "これは`code`です", "これは `code` です"},
+	{"コード/外側 複数バッククォート", "``a`b``を使う", "``a`b`` を使う"},
+	{"コード/後続は整形", "`code` と日本語abc", "`code` と日本語 abc"},
+
+	// URL の内部には手を入れない（URL は半角英数字と URL に使える半角記号の範囲）
+	{"URL/直前の日本語との間", "詳細はhttps://example.com", "詳細は https://example.com"},
+	{"URL/直後の日本語との間", "https://example.comを参照", "https://example.com を参照"},
+	{"URL/クエリとフラグメント", "https://example.com/?q=a&b=(c)#xを参照", "https://example.com/?q=a&b=(c)#x を参照"},
+	{"URL/半角括弧で囲む", "詳細は(https://example.com)を参照", "詳細は (https://example.com) を参照"},
+	{"URL/日本語は URL に含めない", "https://ja.wikipedia.org/wiki/日本語abc", "https://ja.wikipedia.org/wiki/日本語 abc"},
+
+	// ファイルパスの内部には手を入れない
+	{"パス/絶対パス", "/usr/local/日本語abc/bin", "/usr/local/日本語abc/bin"},
+	{"パス/ホーム", "~/ドキュメント/abc日本", "~/ドキュメント/abc日本"},
+	{"パス/相対パス", "パス ./日本abc と ../日本abc", "パス ./日本abc と ../日本abc"},
+	{"パス/Windows", "C:\\Users\\山田abc\\Documents", "C:\\Users\\山田abc\\Documents"},
+	{"パス/括弧の直後", "（/usr/日本abc）", "（/usr/日本abc）"},
+
+	// 不正な UTF-8 は壊さないようそのまま返す
+	{"入力/不正な UTF-8", "\xff日本語abc", "\xff日本語abc"},
+}
+
+func TestFormat(t *testing.T) {
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := Format(tt.in); got != tt.want {
+				t.Errorf("Format(%q)\n got: %q\nwant: %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+// 2 回適用してもスペースが増えない。
+func TestFormatIdempotent(t *testing.T) {
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			once := Format(tt.in)
+			if twice := Format(once); twice != once {
+				t.Errorf("Format is not idempotent for %q\n once: %q\ntwice: %q", tt.in, once, twice)
+			}
+		})
+	}
+}
+
+// 任意の入力で冪等性と「スペースの挿入以外はしない」ことを確かめる。
+// go test ./... ではシードのみ実行される。長く回すときは go test -fuzz=FuzzFormat ./formatter
+func FuzzFormat(f *testing.F) {
+	for _, tt := range tests {
+		f.Add(tt.in)
+	}
+	f.Fuzz(func(t *testing.T, in string) {
+		once := Format(in)
+		if twice := Format(once); twice != once {
+			t.Fatalf("not idempotent: %q -> %q -> %q", in, once, twice)
+		}
+		if !onlyInsertsSpaces(in, once) {
+			t.Fatalf("changed more than spaces: %q -> %q", in, once)
+		}
+	})
+}
+
+// onlyInsertsSpaces は out が in に半角スペースを挿入しただけのものかを返す。
+func onlyInsertsSpaces(in, out string) bool {
+	if !utf8.ValidString(in) {
+		return in == out
+	}
+	i := 0
+	for _, r := range out {
+		if i < len(in) {
+			if ir, size := utf8.DecodeRuneInString(in[i:]); ir == r {
+				i += size
+				continue
+			}
+		}
+		if r != ' ' {
+			return false
+		}
+	}
+	return i == len(in)
+}
