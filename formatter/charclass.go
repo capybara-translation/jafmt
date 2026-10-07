@@ -70,7 +70,7 @@ func isFullwidthSymbol(r rune) bool {
 func isOpenBracket(r rune) bool  { return r == '(' || r == '[' }
 func isCloseBracket(r rune) bool { return r == ')' || r == ']' }
 
-// isSpanTerminator はファイルパスの終わりとみなす文字（空白と全角記号）かを返す。
-func isSpanTerminator(r rune) bool {
-	return unicode.IsSpace(r) || isFullwidthSymbol(r)
+// isPathTerminator はファイルパスの終わりとみなす文字（空白・全角記号・二重引用符）かを返す。
+func isPathTerminator(r rune) bool {
+	return unicode.IsSpace(r) || isFullwidthSymbol(r) || r == '"'
 }

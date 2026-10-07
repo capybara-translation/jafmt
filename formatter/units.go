@@ -1,6 +1,7 @@
 package formatter
 
 import (
+	"strings"
 	"unicode"
 	"unicode/utf8"
 )
@@ -27,6 +28,8 @@ var units = map[string]bool{
 	"V": true, "mV": true, "mA": true, "mAh": true, "W": true, "kW": true, "Wh": true, "kWh": true, "dB": true,
 	// 画面・印刷
 	"px": true, "pt": true, "dpi": true, "ppi": true, "fps": true,
+	// マイクロ（μ はギリシャ文字の U+03BC。マイクロ記号 U+00B5 の µ も同じ扱いにする）
+	"μm": true, "μg": true, "μL": true, "μs": true, "μA": true, "μV": true,
 }
 
 // numberThenUnit: 数値の直後に単位が続く（「50kg」→「50 kg」）。
@@ -34,14 +37,22 @@ var units = map[string]bool{
 // 数値と単位がそれぞれ独立したトークンになっている場合だけスペースを入れる。
 func numberThenUnit(t *text, i int) bool {
 	rs := t.rs
-	if !isDigit(rs[i-1]) || !isASCIILetter(rs[i]) {
+	if !isDigit(rs[i-1]) {
 		return false
 	}
 	j := i
+	if j < len(rs) && isMicro(rs[j]) {
+		j++
+	}
 	for j < len(rs) && isASCIILetter(rs[j]) {
 		j++
 	}
-	return units[string(rs[i:j])] && isUnitEnd(rs, j) && isNumberStart(t, i-1)
+	unit := strings.ReplaceAll(string(rs[i:j]), "µ", "μ")
+	return units[unit] && isUnitEnd(rs, j) && isNumberStart(t, i-1)
+}
+
+func isMicro(r rune) bool {
+	return r == 'μ' || r == 'µ'
 }
 
 // isNumberStart は t.rs[i] で終わる数値（「1,000」「1.5」）が独立したトークンとして始まっているかを返す。

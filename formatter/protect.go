@@ -88,9 +88,9 @@ func urlEnd(rs []rune, i int) int {
 
 // pathEnd は rs[i] から始まるファイルパスの終端（排他）を返す。パスでなければ -1。
 // 「/」で始まるものは「日本/US」のような区切りと区別するため、トークンの先頭にある場合だけパスとみなす。
-// 日本語を含むパスも多いため、空白か全角記号までをパスとみなす。
+// 日本語を含むパスも多いため、空白・全角記号・二重引用符までをパスとみなす。
 func pathEnd(rs []rune, i int) int {
-	tokenStart := i == 0 || isSpanTerminator(rs[i-1]) || isOpeningBracket(rs[i-1])
+	tokenStart := i == 0 || isPathTerminator(rs[i-1]) || isOpeningBracket(rs[i-1])
 	var prefixLen int
 	switch {
 	case hasPrefix(rs[i:], "~/"), hasPrefix(rs[i:], "./"):
@@ -105,10 +105,10 @@ func pathEnd(rs []rune, i int) int {
 		return -1
 	}
 	j := i + prefixLen
-	if j >= len(rs) || isSpanTerminator(rs[j]) {
+	if j >= len(rs) || isPathTerminator(rs[j]) {
 		return -1
 	}
-	for j < len(rs) && !isSpanTerminator(rs[j]) {
+	for j < len(rs) && !isPathTerminator(rs[j]) {
 		j++
 	}
 	return j

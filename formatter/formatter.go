@@ -11,8 +11,9 @@ import (
 // text は整形対象のルーン列と、整形してはいけない範囲の情報を持つ。
 type text struct {
 	rs    []rune
-	spans []int      // spans[i] は rs[i] が属する保護範囲の番号（0 は範囲外）
-	kinds []spanKind // kinds[id] は保護範囲の種類
+	spans []int       // spans[i] は rs[i] が属する保護範囲の番号（0 は範囲外）
+	kinds []spanKind  // kinds[id] は保護範囲の種類
+	roles []delimRole // roles[i] は rs[i] の囲み記号としての役割
 }
 
 // spaceRule は t.rs[i-1] と t.rs[i] の間に半角スペースを入れるべきかを判定する。
@@ -31,6 +32,8 @@ func init() {
 		questionThenWord,
 		japaneseThenCode,
 		codeThenJapanese,
+		japaneseThenDelim,
+		delimThenJapanese,
 		numberThenUnit,
 	}
 }
@@ -43,6 +46,7 @@ func Format(s string) string {
 	}
 	t := &text{rs: []rune(s)}
 	t.spans, t.kinds = protectedSpans(t.rs)
+	t.roles = pairedDelimiters(t.rs, t.spans)
 
 	var b strings.Builder
 	b.Grow(len(s) + len(s)/4)
@@ -106,6 +110,16 @@ func japaneseThenCode(t *text, i int) bool {
 // codeThenJapanese: インラインコードの直後に日本語が続く（「`code`です」）。
 func codeThenJapanese(t *text, i int) bool {
 	return t.spanEndsAt(i-1, spanCode) && isJapanese(t.rs[i])
+}
+
+// japaneseThenDelim: 日本語の直後に引用符や強調が始まる（「これは"OK"」「これは**bold**」）。
+func japaneseThenDelim(t *text, i int) bool {
+	return isJapanese(t.rs[i-1]) && t.roles[i] == delimOpen
+}
+
+// delimThenJapanese: 引用符や強調の直後に日本語が続く（「"test"と」「**bold**です」）。
+func delimThenJapanese(t *text, i int) bool {
+	return t.roles[i-1] == delimClose && isJapanese(t.rs[i])
 }
 
 // spanStartsAt は t.rs[i] が kind の保護範囲の先頭かを返す。
