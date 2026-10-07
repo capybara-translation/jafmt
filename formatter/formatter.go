@@ -148,7 +148,7 @@ func (t *text) spanEndsAt(i int, kind spanKind) bool {
 	return id != 0 && t.kinds[id] == kind && (i == len(t.rs)-1 || t.spans[i+1] != id)
 }
 
-// startsWord は rs[i] から英数字の語が始まるかを返す。語頭に付く記号（#、@、$）は飛ばして判定する。
+// startsWord は rs[i] から英数字の語が始まるかを返す。語頭に付く記号（#、@、$、_）は飛ばして判定する。
 func startsWord(rs []rune, i int) bool {
 	for i < len(rs) && isLeadingAttached(rs[i]) {
 		i++
@@ -156,7 +156,7 @@ func startsWord(rs []rune, i int) bool {
 	return i < len(rs) && isAlnum(rs[i])
 }
 
-// endsWord は rs[i] で英数字の語が終わるかを返す。語末に付く記号（%、°、#、+）と、
+// endsWord は rs[i] で英数字の語が終わるかを返す。語末に付く記号（%、°、#、+、_）と、
 // 結合文字・異体字セレクタ（NFD の「é」など）は飛ばして判定する。
 func endsWord(rs []rune, i int) bool {
 	i = baseAt(rs, i)

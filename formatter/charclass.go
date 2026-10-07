@@ -29,19 +29,19 @@ func isAlnum(r rune) bool {
 	return unicode.Is(unicode.Latin, r) && unicode.IsLetter(r)
 }
 
-// isLeadingAttached は語頭で英数字に付く記号（#123、@user、$100）かを返す。
+// isLeadingAttached は語頭で英数字に付く記号（#123、@user、$100、_id）かを返す。
 func isLeadingAttached(r rune) bool {
 	switch r {
-	case '#', '@', '$':
+	case '#', '@', '$', '_':
 		return true
 	}
 	return false
 }
 
-// isTrailingAttached は語末で英数字に付く記号（50%、45°、C#、C++）かを返す。
+// isTrailingAttached は語末で英数字に付く記号（50%、45°、C#、C++、__init__）かを返す。
 func isTrailingAttached(r rune) bool {
 	switch r {
-	case '%', '°', '#', '+':
+	case '%', '°', '#', '+', '_':
 		return true
 	}
 	return false
