@@ -72,20 +72,27 @@ func (t *text) needsSpace(i int) bool {
 	return false
 }
 
+// 各ルールは、直前の文字を japaneseAt や endsWord で判定する。結合文字（NFD の濁点など）や
+// 異体字セレクタが付いていても、それらが付いている元の文字で判定するため。
+//
+// 処理時間が入力の長さに比例するよう、各ルールは 1 文字で判定できる軽い条件を先に調べ、
+// 前後へ走査する条件は後に回す（記号が大量に続く入力で 2 乗の時間がかからないように）。
+
 // japaneseThenWord: 日本語の直後に英数字の語が始まる（「日本語abc」「は#123」）。
 func japaneseThenWord(t *text, i int) bool {
-	return isJapanese(t.rs[i-1]) && startsWord(t.rs, i)
+	prev := t.rs[i-1]
+	return (isJapanese(prev) || isExtender(prev)) && startsWord(t.rs, i) && japaneseAt(t.rs, i-1)
 }
 
 // wordThenJapanese: 英数字の語の直後に日本語が続く（「abc日本語」「50%の」）。
 func wordThenJapanese(t *text, i int) bool {
-	return endsWord(t.rs, i-1) && isJapanese(t.rs[i])
+	return isJapanese(t.rs[i]) && endsWord(t.rs, i-1)
 }
 
 // japaneseThenBracket: 日本語の直後に半角の開き括弧が続く（「日本語(Japanese)」「の[詳細]」）。
 // 括弧の内側（「(タイトル)」「[新規]」）には入れない。
 func japaneseThenBracket(t *text, i int) bool {
-	return isJapanese(t.rs[i-1]) && isOpenBracket(t.rs[i])
+	return isOpenBracket(t.rs[i]) && japaneseAt(t.rs, i-1)
 }
 
 // bracketThenJapanese: 半角の閉じ括弧の直後に日本語が続く（「(S)を」「[新規]を」）。
@@ -95,16 +102,23 @@ func bracketThenJapanese(t *text, i int) bool {
 
 // questionThenWord: 日本語の文末の「?」「!」の直後に英数字の語が始まる（「しますか?Excel」）。
 func questionThenWord(t *text, i int) bool {
+	if !isQuestion(t.rs[i-1]) || !startsWord(t.rs, i) {
+		return false
+	}
 	j := i - 1
-	for j >= 0 && (t.rs[j] == '?' || t.rs[j] == '!') {
+	for j >= 0 && isQuestion(t.rs[j]) {
 		j--
 	}
-	return j < i-1 && j >= 0 && isJapanese(t.rs[j]) && startsWord(t.rs, i)
+	return j >= 0 && japaneseAt(t.rs, j)
+}
+
+func isQuestion(r rune) bool {
+	return r == '?' || r == '!'
 }
 
 // japaneseThenCode: 日本語の直後にインラインコードが始まる（「これは`code`」）。
 func japaneseThenCode(t *text, i int) bool {
-	return isJapanese(t.rs[i-1]) && t.spanStartsAt(i, spanCode)
+	return t.spanStartsAt(i, spanCode) && japaneseAt(t.rs, i-1)
 }
 
 // codeThenJapanese: インラインコードの直後に日本語が続く（「`code`です」）。
@@ -114,7 +128,7 @@ func codeThenJapanese(t *text, i int) bool {
 
 // japaneseThenDelim: 日本語の直後に引用符や強調が始まる（「これは"OK"」「これは**bold**」）。
 func japaneseThenDelim(t *text, i int) bool {
-	return isJapanese(t.rs[i-1]) && t.roles[i] == delimOpen
+	return t.roles[i] == delimOpen && japaneseAt(t.rs, i-1)
 }
 
 // delimThenJapanese: 引用符や強調の直後に日本語が続く（「"test"と」「**bold**です」）。
@@ -142,8 +156,10 @@ func startsWord(rs []rune, i int) bool {
 	return i < len(rs) && isAlnum(rs[i])
 }
 
-// endsWord は rs[i] で英数字の語が終わるかを返す。語末に付く記号（%、°、#、+）は飛ばして判定する。
+// endsWord は rs[i] で英数字の語が終わるかを返す。語末に付く記号（%、°、#、+）と、
+// 結合文字・異体字セレクタ（NFD の「é」など）は飛ばして判定する。
 func endsWord(rs []rune, i int) bool {
+	i = baseAt(rs, i)
 	for i >= 0 && isTrailingAttached(rs[i]) {
 		i--
 	}

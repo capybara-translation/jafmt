@@ -1,4 +1,3 @@
-# Check out every text file with LF endings, on every platform. gofmt treats
-# CRLF as unformatted, so a Windows checkout with core.autocrlf=true would
-# otherwise fail the gofmt step in CI.
+# どの OS でもテキストファイルを LF で checkout する。gofmt は CRLF を未整形とみなすため、
+# Windows で core.autocrlf=true の環境だと CI の gofmt のステップが失敗してしまう。
 * text=auto eol=lf

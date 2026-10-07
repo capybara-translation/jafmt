@@ -42,18 +42,26 @@ func pairQuotes(rs []rune, spans []int, roles []delimRole) {
 // pairEmphasis は c の連続（**、~~ など）を、同じ長さの連続と対にする。
 // CommonMark と同様に、開きの直後と閉じの直前が空白のものは強調とみなさない（「2 * 3」「* 箇条書き」）。
 func pairEmphasis(rs []rune, spans []int, roles []delimRole, c rune, validLen func(int) bool) {
+	// 閉じが見つからなかった長さ。後ろの開きが探す範囲は前の開きが探した範囲に含まれるため、
+	// 同じ行では同じ長さの閉じは見つからない。探し直さないことで、閉じのない記号が
+	// 大量に続く行でも行の長さに比例する時間で終わる。
+	unclosed := map[int]bool{}
 	for i := 0; i < len(rs); {
+		if rs[i] == '\n' {
+			clear(unclosed)
+		}
 		n := delimRun(rs, spans, i, c)
 		if n == 0 {
 			i++
 			continue
 		}
-		if !validLen(n) || i+n >= len(rs) || unicode.IsSpace(rs[i+n]) {
+		if !validLen(n) || unclosed[n] || i+n >= len(rs) || unicode.IsSpace(rs[i+n]) {
 			i += n
 			continue
 		}
 		j := closingRun(rs, spans, i+n, c, n)
 		if j < 0 {
+			unclosed[n] = true
 			i += n
 			continue
 		}

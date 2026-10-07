@@ -23,6 +23,7 @@ macOS の Automator クイックアクションと組み合わせると、任意
   - 語頭: `#` `@` `$`（`は#123` → `は #123`、`は@user` → `は @user`）
 - 語中の記号はそのまま語の一部になる（`node.jsと` → `node.js と`、`Wi-Fiを` → `Wi-Fi を`）
 - アクセント付きのラテン文字（`é` など）も英字として扱う
+- 結合文字（濁点が分かれた NFD の `が` など）や異体字セレクタ（`葛󠄀` など）が付いた文字は、それが付いている元の文字で判定する
 - 日本語と半角括弧 `()` `[]` の外側の間に入れる（`日本語(Japanese)です` → `日本語 (Japanese) です`、`[新規]をクリック` → `[新規] をクリック`）
 - 日本語の後の `?` `!` と、続く英数字の間に入れる（`保存しますか?Excelを` → `保存しますか? Excel を`）
 - 日本語とインラインコードの外側の間に入れる（``これは`code`です`` → ``これは `code` です``）
@@ -157,7 +158,7 @@ go build ./cmd/jafmt
 ```
 
 - 整形ロジックは [formatter](formatter/) パッケージ、CLI は [cmd/jafmt](cmd/jafmt/) で入出力だけを担当する
-- 正規表現は使わず、ルーン単位で前後の文字種を判定する。文字種の判定は [charclass.go](formatter/charclass.go)、スペースを入れる規則は [formatter.go](formatter/formatter.go) の `spaceRules`、単位の一覧は [units.go](formatter/units.go)、引用符と強調の対応づけは [delimiters.go](formatter/delimiters.go)、整形しない範囲は [protect.go](formatter/protect.go) にある
+- 整形ロジックは正規表現を使わず、ルーン単位で前後の文字種を判定する。文字種の判定は [charclass.go](formatter/charclass.go)、スペースを入れる規則は [formatter.go](formatter/formatter.go) の `spaceRules`、単位の一覧は [units.go](formatter/units.go)、引用符と強調の対応づけは [delimiters.go](formatter/delimiters.go)、整形しない範囲は [protect.go](formatter/protect.go) にある
 - ルールを追加・変更するときは、先に [formatter_test.go](formatter/formatter_test.go) のテーブルへケースを追加してから実装する
 - 冪等性と「スペースの挿入以外はしない」ことはファズテストでも確認できる
 
@@ -175,3 +176,7 @@ go test -run '^$' -fuzz=FuzzFormat -fuzztime=60s ./formatter
 git tag v0.1.0
 git push origin v0.1.0
 ```
+
+## ライセンス
+
+MIT。[LICENSE](LICENSE) を参照。

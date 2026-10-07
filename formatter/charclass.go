@@ -70,6 +70,27 @@ func isFullwidthSymbol(r rune) bool {
 func isOpenBracket(r rune) bool  { return r == '(' || r == '[' }
 func isCloseBracket(r rune) bool { return r == ')' || r == ']' }
 
+// isExtender は直前の文字に付いて 1 文字として表示される文字かを返す。
+// 結合文字（NFD の濁点 U+3099 やアクセント U+0301）と異体字セレクタ（葛󠄀 など）が該当する。
+func isExtender(r rune) bool {
+	return unicode.In(r, unicode.Mn, unicode.Me, unicode.Variation_Selector)
+}
+
+// baseAt は rs[i] から前へ結合文字と異体字セレクタを飛ばし、それらが付いている元の文字の位置を返す。
+// 元の文字がなければ -1 を返す。
+func baseAt(rs []rune, i int) int {
+	for i >= 0 && isExtender(rs[i]) {
+		i--
+	}
+	return i
+}
+
+// japaneseAt は rs[i] が日本語か（結合文字などなら、それが付いている元の文字が日本語か）を返す。
+func japaneseAt(rs []rune, i int) bool {
+	i = baseAt(rs, i)
+	return i >= 0 && isJapanese(rs[i])
+}
+
 // isPathTerminator はファイルパスの終わりとみなす文字（空白・全角記号・二重引用符）かを返す。
 func isPathTerminator(r rune) bool {
 	return unicode.IsSpace(r) || isFullwidthSymbol(r) || r == '"'
