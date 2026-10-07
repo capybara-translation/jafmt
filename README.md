@@ -71,20 +71,41 @@ macOS の Automator クイックアクションと組み合わせると、任意
 - 数字と単位以外の半角文字同士の規則（`Ctrl+Alt` → `Ctrl + Alt` など）は扱わない
 - 半角の一重引用符（`'test'`）。アポストロフィ（`don't`）と区別できないため
 
-## ビルドとインストール
+## インストール
 
-Go 1.25 以降が必要。外部依存はない。
-
-```sh
-go test ./...
-go install ./cmd/jafmt
-```
-
-`$(go env GOPATH)/bin/jafmt`（通常は `~/go/bin/jafmt`）にインストールされる。Automator から呼ぶときに必要なので、絶対パスを確認しておく。
+### Homebrew（macOS / Linux）
 
 ```sh
-echo "$(go env GOPATH)/bin/jafmt"
+brew install --cask capybara-translation/tap/jafmt
 ```
+
+### go install
+
+Go 1.25 以降が必要。
+
+```sh
+go install github.com/capybara-translation/jafmt/cmd/jafmt@latest
+```
+
+### ビルド済みバイナリ
+
+[Releases](https://github.com/capybara-translation/jafmt/releases) から使っている環境のアーカイブをダウンロードする。同じリリースの `checksums.txt` で検証する。
+
+### インストール先の確認
+
+Automator から呼ぶときに絶対パスが必要なので、確認しておく。
+
+```sh
+command -v jafmt
+```
+
+| インストール方法 | 通常のインストール先 |
+|---|---|
+| Homebrew（Apple シリコン） | `/opt/homebrew/bin/jafmt` |
+| Homebrew（Intel） | `/usr/local/bin/jafmt` |
+| go install | `~/go/bin/jafmt`（`$(go env GOPATH)/bin`） |
+
+`jafmt version` でインストールしたバージョンを確認できる。
 
 ## Automator でクイックアクションを作成する
 
@@ -97,10 +118,10 @@ echo "$(go env GOPATH)/bin/jafmt"
 4. 「シェルスクリプトを実行」を次のように設定する
    - 「シェル」: `/bin/zsh`
    - 「入力の引き渡し方法」: **stdin へ**
-   - スクリプト本文: インストール先の絶対パスを書く（Automator のシェルには `~/go/bin` が `PATH` に含まれないため）
+   - スクリプト本文: [インストール先](#インストール先の確認)の絶対パスを書く（Automator のシェルは `.zshrc` を読まず、`/opt/homebrew/bin` や `~/go/bin` が `PATH` に含まれないため）
 
      ```sh
-     /Users/<ユーザー名>/go/bin/jafmt
+     /opt/homebrew/bin/jafmt
      ```
 
 5. 「選択したテキストを整形する」などの名前で保存する（`~/Library/Services/` に保存される）
@@ -128,6 +149,13 @@ echo "$(go env GOPATH)/bin/jafmt"
 
 ## 開発
 
+テストとビルドは次のとおり。外部依存はない。
+
+```sh
+go test ./...
+go build ./cmd/jafmt
+```
+
 - 整形ロジックは [formatter](formatter/) パッケージ、CLI は [cmd/jafmt](cmd/jafmt/) で入出力だけを担当する
 - 正規表現は使わず、ルーン単位で前後の文字種を判定する。文字種の判定は [charclass.go](formatter/charclass.go)、スペースを入れる規則は [formatter.go](formatter/formatter.go) の `spaceRules`、単位の一覧は [units.go](formatter/units.go)、引用符と強調の対応づけは [delimiters.go](formatter/delimiters.go)、整形しない範囲は [protect.go](formatter/protect.go) にある
 - ルールを追加・変更するときは、先に [formatter_test.go](formatter/formatter_test.go) のテーブルへケースを追加してから実装する
@@ -135,4 +163,15 @@ echo "$(go env GOPATH)/bin/jafmt"
 
 ```sh
 go test -run '^$' -fuzz=FuzzFormat -fuzztime=60s ./formatter
+```
+
+### CI とリリース
+
+- push と pull request のたびに、GitHub Actions で gofmt・`go vet`・テスト（macOS / Linux / Windows）・60 秒のファズテスト・govulncheck・GoReleaser の試しビルドを実行する
+- `v*` のタグを push すると、テストと govulncheck が通った後に GoReleaser が GitHub Release を作成し、[capybara-translation/homebrew-tap](https://github.com/capybara-translation/homebrew-tap) の cask を更新する
+- tap へ push するため、リポジトリのシークレット `HOMEBREW_TAP_TOKEN` に tap へ書き込めるトークンを設定しておく
+
+```sh
+git tag v0.1.0
+git push origin v0.1.0
 ```

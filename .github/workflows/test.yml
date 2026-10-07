@@ -1,0 +1,76 @@
+name: test
+on: [push, pull_request]
+
+# どのジョブもリポジトリを読むだけ。ここで宣言しておくと、リポジトリの既定の
+# ワークフロー権限に関係なく GITHUB_TOKEN が読み取り専用になる。
+permissions:
+  contents: read
+
+# Go は go.mod の最小バージョンではなく常に最新の安定版を使う。標準ライブラリは
+# バイナリに組み込まれるため、古いパッチリリースでビルドすると既知の脆弱性も
+# 配布してしまう。`go install` 向けの最小バージョンは go.mod で指定する。
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          check-latest: true
+      - name: gofmt
+        shell: bash
+        run: |
+          gofmt -l .
+          test -z "$(gofmt -l .)"
+      - run: go mod tidy -diff
+      - run: go vet ./...
+      - run: go test ./...
+
+  # go test ./... はシードと testdata の入力しか試さないため、ランダムな入力でも
+  # 冪等性と「スペースの挿入以外はしない」ことが崩れていないかを確かめる。
+  fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          check-latest: true
+      - run: go test -run '^$' -fuzz=FuzzFormat -fuzztime=60s ./formatter
+      # 失敗した入力は testdata/fuzz に保存される。手元で再現できるよう残す。
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: fuzz-failures
+          path: formatter/testdata/fuzz
+
+  govulncheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          check-latest: true
+      # 自分のコードから到達できる既知の脆弱性（依存先と、上記の Go の標準ライブラリ）があれば失敗する。
+      - run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+  goreleaser-snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          check-latest: true
+      # 公開せずに全リリース対象をビルドし、.goreleaser.yaml の不備をタグを打つ前に見つける。
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          version: "~> v2"
+          args: release --snapshot --clean --skip=publish

@@ -1,0 +1,45 @@
+name: release
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          check-latest: true
+      - run: go test ./...
+      - run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+  # テストと govulncheck が通った後だけ実行し、壊れたビルドや既知の脆弱性を含む
+  # ビルドを公開しない。Go は最新の安定版を使う（理由は test.yml を参照）。
+  # テストを書き込み権限のあるトークンで実行しないよう、ジョブを分けている。
+  release:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      # GitHub Release を作成する。Homebrew の tap は別リポジトリにあるため、
+      # そちらへは HOMEBREW_TAP_TOKEN で push する。
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # GoReleaser はバージョンと変更履歴の生成に全履歴とタグを使う。
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          check-latest: true
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}

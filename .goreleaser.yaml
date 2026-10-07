@@ -1,0 +1,48 @@
+version: 2
+
+project_name: jafmt
+
+builds:
+  - main: ./cmd/jafmt
+    binary: jafmt
+    ldflags:
+      # .Version には先頭の "v" が付かない。`jafmt version` がタグそのもの
+      # （`go install ...@vX.Y.Z` と同じ文字列）を表示するよう "v" を付ける。
+      - -s -w -X main.version=v{{ .Version }}
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
+
+archives:
+  - formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+checksum:
+  name_template: "checksums.txt"
+
+# ビルド済みバイナリの配布には、非推奨の brews ではなく homebrew_casks を使う。
+homebrew_casks:
+  - repository:
+      owner: capybara-translation
+      name: homebrew-tap
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: "https://github.com/capybara-translation/jafmt"
+    description: "Insert spaces between Japanese and half-width alphanumeric characters"
+    license: "MIT"
+    binaries: [jafmt]
+    hooks:
+      post:
+        # バイナリは署名・公証していない。Homebrew は cask のダウンロードに
+        # quarantine 属性を付けるため、外さないと Gatekeeper が実行を拒否する。
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/jafmt"]
+          end
+
+changelog:
+  sort: asc
